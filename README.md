@@ -1,4 +1,5 @@
-# Biolink API
+# BioLink API 
+[![Build Status](https://travis-ci.org/biolink/biolink-api.svg?branch=master)](https://travis-ci.org/biolink/biolink-api)
 
 An API providing access to information on biologically and
 biomedically relevant entities, and the relationships between them, including:
@@ -60,6 +61,25 @@ export PYTHONPATH=.:$PYTHONPATH
 python biolink/app.py
 ```
 
+## Running with Docker
+
+Docker requires a config directory with an
+ontobio config file named ontobio-config.yaml
+and a biolink config file named biolink-config.yaml
+
+For testing purposes these can be copied from the defaults, eg
+
+```
+mkdir config
+cp conf/config.yaml config/biolink-config.yaml
+cp venv/lib/python3.7/site-packages/ontobio/config.yaml config/ontobio-config.yaml
+```
+
+```
+docker build -t biolink-api .
+docker run -p 5000:5000 -v `pwd`/config:/config biolink-api start-server -k gevent --worker-connections 5 --bind 0.0.0.0:5000 wsgi:app
+```
+
 ## Datamodel
 
 See the swagger UI for more details. Click on 'model' under any of the routes.
@@ -108,7 +128,7 @@ A service implementing the Biolink API can be accessed through
 standard http libraries. We also provide client language bindings,
 generated through swagger-codegen. For more information, see:
 
-[ClientAPIs](/biolink/biolink-api/wiki/ClientAPIs)
+[ClientAPIs](https://github.com/biolink/biolink-api/wiki/ClientAPIs)
 
 ## Implementation and Project Organization
 

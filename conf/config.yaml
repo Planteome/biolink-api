@@ -12,10 +12,10 @@ amigo_solr_search:
   timeout: 2
 sparql:
   url: "http://sparql.hegroup.org/sparql"
-  timeout: 2
+  timeout: 30
 scigraph_ontology:
   url: "https://scigraph-ontology.monarchinitiative.org/scigraph/"
-  timeout: 2
+  timeout: 15
 scigraph_data:
   url: "https://scigraph-ontology.monarchinitiative.org/scigraph/"
   timeout: 2

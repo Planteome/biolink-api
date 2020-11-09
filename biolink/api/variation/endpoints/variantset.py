@@ -7,11 +7,10 @@ from biolink.api.variation.business import create_variantset, update_variantset,
 from biolink.datamodel.serializers import association
 from biolink.api.restplus import api
 from biolink.database.models import VariantSet
-import pysolr
+
+from biolink.error_handlers import RouteNotImplementedException
 
 log = logging.getLogger(__name__)
-
-ns = api.namespace('variation/set', description='Operations related to sets of variants')
 
 pagination_arguments = reqparse.RequestParser()
 pagination_arguments.add_argument('page', type=int, required=False, default=1, help='Page number')
@@ -41,8 +40,6 @@ page_of_variantsets = api.inherit('Page of variant sets', pagination, {
     'items': fields.List(fields.Nested(variantset))
 })
 
-
-@ns.route('/')
 class VariantSetsCollection(Resource):
 
     @api.expect(pagination_arguments)
@@ -68,8 +65,6 @@ class VariantSetsCollection(Resource):
         create_variantset(request.json)
         return None, 201
 
-
-@ns.route('/<id>')
 @api.response(404, 'VariantSet not found.')
 class VariantSetItem(Resource):
 
@@ -98,10 +93,6 @@ class VariantSetItem(Resource):
         delete_post(id)
         return None, 204
 
-
-#@ns.route('/archive/<int:year>/')
-#@ns.route('/archive/<int:year>/<int:month>/')
-@ns.route('/archive/<int:year>/<int:month>/<int:day>/')
 class VariantSetsArchiveCollection(Resource):
 
     @api.expect(pagination_arguments, validate=True)
@@ -126,8 +117,7 @@ class VariantSetsArchiveCollection(Resource):
 
         return posts_page
 
-@ns.route('/analyze/<id>')
-class Analyze(Resource):
+class VariantAnalyze(Resource):
 
     #@api.expect(parser)
     @api.marshal_list_with(association)
@@ -136,6 +126,5 @@ class Analyze(Resource):
         Returns list of matches
         """
         args = parser.parse_args()
-
-        return []
+        raise RouteNotImplementedException()
     

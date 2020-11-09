@@ -9,10 +9,39 @@ from biolink.api.restplus import api
 
 search_result = api.model('SearchResult', {
     'numFound': fields.Integer(description='total number of associations matching query'),
-    'start': fields.Integer(description='Cursor position'),
+    'docs': fields.List(fields.Raw, description='solr docs'),
     'facet_counts': fields.Raw(description='Mapping between field names and association counts'),
-    'facet_pivot': fields.Raw(description='Populated in facet_pivots is passed'),
-    })
+    'highlighting': fields.Raw(description='Mapping between id and solr highlight')
+})
+
+autocomplete_result = api.model('AutocompleteResult', {
+    'id': fields.String(description='curie formatted id'),
+    'label': fields.List(fields.String, description='primary label (rdfs:label)'),
+    'match': fields.String(description='matched part of document (may be primary label, synonym, id, etc)'),
+    'category': fields.List(fields.String, description='node categories'),
+    'taxon': fields.String(description='taxon as NCBITaxon curie'),
+    'taxon_label': fields.String(description='taxon label'),
+    'highlight': fields.String(description='solr highlight'),
+    'has_highlight': fields.Boolean(description='True if highlight can be interpreted as html, else False')
+})
+
+autocomplete_results = api.model('AutocompleteResults', {
+    'docs': fields.List(fields.Nested(autocomplete_result),
+                        description='list of AutocompleteResult docs'),
+})
+
+lay_autocomplete = api.model('LayAutocomplete', {
+    'id': fields.String(description='curie formatted id'),
+    'label': fields.String(description='primary label (rdfs:label)'),
+    'matched_synonym': fields.String(description='matched synonym'),
+    'highlight': fields.String(description='solr highlight')
+})
+
+lay_results = api.model('LayResults', {
+    'results': fields.List(fields.Nested(lay_autocomplete),
+                        description='list of AutocompleteResult docs'),
+})
+
 
 ## BBOP/OBO Graphs
 
@@ -34,13 +63,15 @@ association_property_value = api.inherit('AssociationPropertyValue', abstract_pr
 
 node = api.model('Node', {
     'id': fields.String(readOnly=True, description='ID or CURIE'),
-    'lbl': fields.String(readOnly=True, description='human readable label, maps to rdfs:label')
+    'lbl': fields.String(readOnly=True, description='human readable label, maps to rdfs:label'),
+    'meta': fields.Raw(description='metadata about the Node')
 })
 
 edge = api.model('Edge', {
     'sub': fields.String(readOnly=True, description='Subject (source) Node ID'),
     'pred': fields.String(readOnly=True, description='Predicate (relation) ID'),
     'obj': fields.String(readOnly=True, description='Object (target) Node ID'),
+    'meta': fields.Raw(description='metadata about the Edge')
 })
 
 bbop_graph = api.model('Graph', {
@@ -48,11 +79,16 @@ bbop_graph = api.model('Graph', {
     'edges': fields.List(fields.Nested(edge), description='All edges in graph'),
 })
 
-named_object = api.model('NamedObject', {
-    'id': fields.String(readOnly=True, description='ID or CURIE e.g. MGI:1201606'),
+named_object_core = api.model('NamedObjectCore', {
+    'id': fields.String(readOnly=True, description='ID or CURIE e.g. MGI:1201606', required=True),
     'label': fields.String(readOnly=True, description='RDFS Label'),
+    'iri': fields.String(readOnly=True, description='IRI'),
+    'category': fields.List(fields.String(readOnly=True, description='Type of object'))
+})
+
+
+named_object = api.inherit('NamedObject', named_object_core, {
     'description': fields.String(readOnly=True, description='Descriptive text for the entity. For ontology classes, this will be a definition.'),
-    'categories': fields.List(fields.String(readOnly=True, description='Type of object (inferred)')),
     'types': fields.List(fields.String(readOnly=True, description='Type of object (direct)')),
     'synonyms': fields.List(fields.Nested(synonym_property_value), description='list of synonyms or alternate labels'),
     'deprecated': fields.Boolean(description='True if the node is deprecated/obsoleted.'),
@@ -63,10 +99,13 @@ named_object = api.model('NamedObject', {
 entity_reference = api.model('EntityReference', {
     'id': fields.String(readOnly=True, description='ID or CURIE e.g. MGI:1201606'),
     'label': fields.String(readOnly=True, description='RDFS Label'),
-    'categories': fields.List(fields.String(readOnly=True, description='Type of object')),
 })
 
 relation = api.inherit('Relation', named_object, {
+})
+
+relation_ref = api.inherit('RelationRef', named_object_core, {
+    'inverse': fields.Boolean(description='is relation inverted', default=False)
 })
 
 publication = api.inherit('Publication', named_object, {
@@ -80,10 +119,20 @@ taxon = api.model('Taxon', {
     'label': fields.String(readOnly=True, description='RDFS Label')
 })
 
+bio_object_core = api.inherit('BioObjectCore', named_object_core, {
+    'taxon': fields.Nested(taxon, description='Taxon to which the object belongs'),
+    
+})
+
 bio_object = api.inherit('BioObject', named_object, {
     'taxon': fields.Nested(taxon, description='Taxon to which the object belongs'),
+    'association_counts': fields.Raw(description='association counts'),
     'xrefs': fields.List(fields.String, description='Database cross-references. These are usually CURIEs, but may also be URLs. E.g. ENSEMBL:ENSG00000099940 '),
-    
+})
+
+disease_object = api.inherit('DiseaseObject', bio_object, {
+    'inheritance': fields.List(fields.Nested(named_object_core), description='Inheritance for object'),
+    'clinical_modifiers': fields.List(fields.Nested(named_object_core), description='Clinical modifiers such as age of onset, pace of progression, and temporal patterns'),
 })
 
 # Assoc
@@ -94,19 +143,22 @@ annotation_extension = api.model('AnnotationExtension', {
 })
 
 association = api.model('Association', {
-    'id': fields.String(readOnly=True, description='Association/annotation unique ID'),
+    'id': fields.String(readOnly=True, description='Association/annotation unique ID', required=True),
     'type': fields.String(readOnly=True, description='Type of association, e.g. gene-phenotype'),
-    'subject': fields.Nested(bio_object, description='Subject of association (what it is about), e.g. ClinVar:nnn, MGI:1201606'),
-    'subject_extension': fields.List(fields.Nested(annotation_extension, description='Additional properties of the subject in the context of this association.')),
-    'object': fields.Nested(bio_object, description='Object (sensu RDF), aka target, e.g. HP:0000448, MP:0002109, DOID:14330'),
-    'object_extension': fields.List(fields.Nested(annotation_extension, description='Additional properties of the object in the context of this association. See http://www.biomedcentral.com/1471-2105/15/155')),
-    'relation': fields.Nested(relation, description='Relationship type connecting subject and object'),
+    'subject': fields.Nested(bio_object_core, description='Subject of association (what it is about), e.g. ClinVar:nnn, MGI:1201606', required=True),
+    'subject_eq': fields.List(fields.String, description='Equivalent identifiers to subject node'),
+    'subject_extensions': fields.List(fields.Nested(annotation_extension, description='Additional properties of the subject in the context of this association.')),
+    'object': fields.Nested(bio_object_core, description='Object (sensu RDF), aka target, e.g. HP:0000448, MP:0002109, DOID:14330', required=True),
+    'object_eq': fields.List(fields.String, description='Equivalent identifiers to object node'),
+    'object_extensions': fields.List(fields.Nested(annotation_extension, description='Additional properties of the object in the context of this association. See http://www.biomedcentral.com/1471-2105/15/155')),
+    'relation': fields.Nested(relation_ref, description='Relationship type connecting subject and object', required=True),
     'slim': fields.List(fields.String, description='Objects mapped to a slim'),
-    'qualifiers': fields.List(fields.Nested(association_property_value, description='Qualifier on the association')),
+    'negated': fields.Boolean(description='True if association is negated'),
+    'qualifiers': fields.List(fields.String, description='Qualifier on the association'),
     'evidence_graph': fields.Nested(bbop_graph, description='An indirect association is a join between two or more direct assocations, e.g. gene to disease via ortholog. We record the full set of associations as a graph object'),
-    'evidence_types': fields.List(fields.Nested(named_object), description='Evidence types (ECO classes) extracted from evidence graph'),
+    'evidence_types': fields.List(fields.Nested(entity_reference), description='Evidence types (ECO classes)'),
     'provided_by': fields.List(fields.String, description='Provider of association, e.g. Orphanet, ClinVar'),
-    'publications': fields.List(fields.Nested(publication), description='Publications supporting association, extracted from evidence graph')
+    'publications': fields.List(fields.Nested(entity_reference), description='Publications supporting association, extracted from evidence graph')
 })
 
 # For example, via homology
@@ -122,9 +174,9 @@ slimmed_association = api.model('SlimmedAssociation', {
 })
 
 compact_association_set = api.model('CompactAssociationSet', {
-    'subject': fields.String(description='Subject of association (what it is about), e.g. MGI:1201606'),
-    'relation': fields.String(description='Relationship type connecting subject and object list'),
-    'objects': fields.List(fields.String, description='List of O, for a given (S,R) pair, yielding (S,R,O) triples. E.g. list of MPs for (MGI:nnn, has_phenotype)'),
+    'subject': fields.String(description='Subject of association (what it is about), e.g. MGI:1201606', required=True),
+    'relation': fields.String(description='Relationship type connecting subject and object list', required=True),
+    'objects': fields.List(fields.String, description='List of O, for a given (S,R) pair, yielding (S,R,O) triples. E.g. list of MPs for (MGI:nnn, has_phenotype)', required=True),
 })
 
 # A search result that returns a set of associations
@@ -134,7 +186,31 @@ association_results = api.inherit('AssociationResults', search_result, {
     'objects': fields.List(fields.String, description='List of distinct objects used')
 })
 
+d2p_association = api.inherit('D2PAssociation', association, {
+    'frequency': fields.Nested(entity_reference,
+                               description='Frequency of phenotype '
+                                           'in patients with disease',
+                               required=False),
+    'onset': fields.Nested(entity_reference,
+                           description='Onset of phenotype in disease process',
+                           required=False)
+})
 
+# A search result that returns a set of associations
+# plus specific fields for disease to phenotype (frequency and onset)
+d2p_association_results = api.inherit('D2PAssociationResults', search_result, {
+    'associations': fields.List(fields.Nested(d2p_association),
+                                description='Complete representation of full disease '
+                                            'to phenotype association, plus evidence'),
+    'compact_associations': fields.List(fields.Nested(compact_association_set),
+                                        description='Compact representation in which objects '
+                                                    '(e.g. phenotypes) are collected '
+                                                    'for subject-predicate pairs'),
+    'objects': fields.List(fields.String, description='List of distinct objects used')
+})
+
+
+#############
 # Bio Objects
 
 sequence_position = api.model('SequencePosition', {
@@ -253,5 +329,21 @@ phylogenetic_tree = api.inherit('PhylogeneticTree', named_object, {
 clinical_individual = api.inherit('ClinicalIndividual', named_object, {
 })
 
+# text annotate
+token = api.model('Token', {
+    'id': fields.String(description='The CURIE for the entity or token'),
+    'category': fields.List(fields.String, description='entity categories'),
+    'terms': fields.List(fields.String, description='terms')
+})
 
+span = api.model('Span', {
+    'start': fields.Integer(description='start of span text relative to content'),
+    'end': fields.Integer(description='end of span text relative to content'),
+    'text': fields.String(description='span text'),
+    'token': fields.List(fields.Nested(token), description='A token or entity extracted from the span text')
+})
 
+entity_annotation_result = api.model('EntityAnnotationResult', {
+    'content': fields.String('The content from which the entities are extracted from'),
+    'spans': fields.List(fields.Nested(span), description='A marked-up span of text'),
+})

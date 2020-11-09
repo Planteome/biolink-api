@@ -8,13 +8,10 @@ from causalmodels.lego_sparql_util import lego_query, ModelQuery
 
 log = logging.getLogger(__name__)
 
-ns = api.namespace('cam', description='Operations on causal activity models (LEGO)')
-
 parser = api.parser()
 parser.add_argument('title', help='string to search for in title of model')
 parser.add_argument('contributor', help='string to search for in contributor of model')
 
-@ns.route('/model/')
 class ModelCollection(Resource):
 
     #@api.expect(parser)
@@ -31,8 +28,7 @@ class ModelCollection(Resource):
         FILTER(?p != json_model:)
         }""", limit=1000)
 
-@ns.route('/model/query/')
-class ModelCollection(Resource):
+class ModelQuery(Resource):
 
     @api.expect(parser)
     def get(self):
@@ -47,8 +43,7 @@ class ModelCollection(Resource):
         sparql = mq.gen_sparql()
         return lego_query(sparql, limit=100)
     
-@ns.route('/model/properties/')
-class ModelCollection(Resource):
+class ModelProperties(Resource):
 
     @api.expect(parser)
     def get(self):
@@ -63,8 +58,7 @@ class ModelCollection(Resource):
         FILTER(?p != json_model:)
         }""", limit=1000)
 
-@ns.route('/model/contributors/')
-class ModelContibutors(Resource):
+class ModelContributors(Resource):
 
     #@api.expect(parser)
     def get(self):
@@ -78,8 +72,7 @@ class ModelContibutors(Resource):
            dc:contributor ?v
         }""", limit=1000)
 
-@ns.route('/instances/')
-class ModelContibutors(Resource):
+class ModelInstances(Resource):
 
     #@api.expect(parser)
     def get(self):
@@ -92,8 +85,7 @@ class ModelContibutors(Resource):
         {?i rdfs:isDefinedBy ?model 
         }""", limit=1000)
     
-@ns.route('/model/property_values/')
-class ModelCollection(Resource):
+class ModelPropertyValues(Resource):
 
     @api.expect(parser)
     def get(self):
@@ -108,8 +100,7 @@ class ModelCollection(Resource):
         FILTER(?p != json_model:)
         }""", limit=1000)
     
-@ns.route('/model/<id>')
-class Model(Resource):
+class ModelObject(Resource):
 
     #@api.expect(parser)
     #@api.marshal_list_with(association)
@@ -126,8 +117,7 @@ class Model(Resource):
 
         return []
 
-@ns.route('/instance/<id>')
-class Instance(Resource):
+class InstanceObject(Resource):
 
     @api.expect(parser)
     @api.marshal_list_with(association)
@@ -142,7 +132,6 @@ class Instance(Resource):
 
         return []
     
-@ns.route('/activity/')
 class ActivityCollection(Resource):
 
     @api.expect(parser)
@@ -159,7 +148,6 @@ class ActivityCollection(Resource):
         }
         """)
     
-@ns.route('/physical_interaction/')
 class PhysicalInteraction(Resource):
 
     @api.expect(parser)
